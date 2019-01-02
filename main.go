@@ -32,7 +32,8 @@ func rotationListHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	fmt.Fprint(w, json.Marshal(items))
+	res, _ := json.Marshal(items)
+	fmt.Fprint(w, res)
 }
 
 func rotationAddHandler(w http.ResponseWriter, r *http.Request) {
@@ -41,16 +42,21 @@ func rotationAddHandler(w http.ResponseWriter, r *http.Request) {
 	sess := connection.NewSession(nil)
 
 	decoder := json.NewDecoder(r.Body)
-	decoder.Decode(&newRotation)
+	errDecode := decoder.Decode(&newRotation); if errDecode != nil {
+		fmt.Printf("Error decode %s", errDecode)
+	}
 
-	res, err := sess.InsertInto("rotation").Record(newRotation).Exec(); if err != nil {
+	_, err := sess.InsertInto("rotation").
+		Columns("name", "duration", "memory", "origin", "start_time", "end_time").
+		Record(newRotation).
+		Exec()
+
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	affected, _ := res.RowsAffected()
-	log.Printf("Affected rows: %d", affected)
-
-	fmt.Fprint(w, json.Marshal(newRotation))
+	res, _ := json.Marshal(newRotation)
+	fmt.Fprint(w, res)
 }
 
 func main() {
