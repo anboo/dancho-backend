@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mailru/dbr"
-	_ "github.com/mailru/go-clickhouse"
-	"log"
-	"net/http"
 	"github.com/gorilla/mux"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	_ "github.com/mailru/go-clickhouse"
+	"net/http"
 )
 
 type Rotation struct {
@@ -19,52 +19,38 @@ type Rotation struct {
 	EndTime int `db:"end_time" json:"end_time"`
 }
 
-var connection *dbr.Connection
+var connection *gorm.DB
 
 func rotationListHandler(w http.ResponseWriter, r *http.Request) {
 	var items []Rotation
-
-	sess := connection.NewSession(nil)
-	query := sess.Select("name", "duration", "memory", "origin", "start_time", "end_time").From("rotation")
-	//query.Where(dbr.Eq("country_code", "RU"))
-
-	if _, err := query.Load(&items); err != nil {
-		log.Fatal(err)
-	}
+	connection.Find(&items)
 
 	res, _ := json.Marshal(items)
-	fmt.Fprint(w, res)
+	w.Write([]byte(res))
 }
 
 func rotationAddHandler(w http.ResponseWriter, r *http.Request) {
 	var newRotation Rotation
-
-	sess := connection.NewSession(nil)
-
 	decoder := json.NewDecoder(r.Body)
 	errDecode := decoder.Decode(&newRotation); if errDecode != nil {
 		fmt.Printf("Error decode %s", errDecode)
 	}
 
-	_, err := sess.InsertInto("rotation").
-		Columns("name", "duration", "memory", "origin", "start_time", "end_time").
-		Record(newRotation).
-		Exec()
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	connection.Create(&newRotation)
 
 	res, _ := json.Marshal(newRotation)
-	fmt.Fprint(w, res)
+	w.Write([]byte(res))
 }
 
 func main() {
 	var err error
-	connection, err = dbr.Open("clickhouse", "http://127.0.0.1:8123/default", nil)
+	connection, err = gorm.Open("sqlite3", "test.db")
 	if err != nil {
-		log.Fatal(err)
+		panic("failed to connect database")
 	}
+	defer connection.Close()
+
+	connection.AutoMigrate(&Rotation{})
 
 	router := mux.NewRouter()
 	router.HandleFunc("/api/v1/rotations", rotationListHandler).Methods("GET")
